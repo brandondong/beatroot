@@ -43,7 +43,9 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.ListIterator;
 
 import javax.swing.JOptionPane;
@@ -51,27 +53,29 @@ import javax.swing.JOptionPane;
 import at.ofai.music.util.Event;
 import at.ofai.music.util.EventList;
 
-/** The main class of the BeatRoot application.
- *  Processes the command line arguments (see processArgs()) and creates
- *  the three main objects:
- *  <UL>
- *  <LI><code>gui</code> - the graphical user interface object, which
- *  displays the audio and beat data and processes mouse and key events;</LI>
- *  <LI><code>audioPlayer</code> - the object which deals with audio output,
- *  playing the audio data with or without percussion sounds marking the beats;</LI>
- *  <LI><code>audioProcessor</code> - processes audio to find onsets, and calls
- *  the tempo induction and beat tracking methods</LI>
- *  </UL>
- *  @author Simon Dixon
+/**
+ * The main class of the BeatRoot application. Processes the command line
+ * arguments (see processArgs()) and creates the three main objects:
+ * <UL>
+ * <LI><code>gui</code> - the graphical user interface object, which displays
+ * the audio and beat data and processes mouse and key events;</LI>
+ * <LI><code>audioPlayer</code> - the object which deals with audio output,
+ * playing the audio data with or without percussion sounds marking the
+ * beats;</LI>
+ * <LI><code>audioProcessor</code> - processes audio to find onsets, and calls
+ * the tempo induction and beat tracking methods</LI>
+ * </UL>
+ * 
+ * @author Simon Dixon
  */
 public class BeatRoot {
 
 	/** The graphical user interface (frame) object */
 	protected GUI gui;
-	
+
 	/** The object that deals with audio output */
 	protected AudioPlayer audioPlayer;
-	
+
 	/** The object that deals with processing the audio data */
 	protected AudioProcessor audioProcessor;
 
@@ -84,68 +88,100 @@ public class BeatRoot {
 	/** Output file name for saving the beat times in text format, one to a line */
 	protected String textOutputFile;
 
-	/** Input file name of beat times in TMF format (instead of automatic beat tracking) */
+	/**
+	 * Input file name of beat times in TMF format (instead of automatic beat
+	 * tracking)
+	 */
 	protected String beatsIn = null;
 
 	/** Input file name for annotated beat times (for evaluating BeatRoot) */
 	protected String beatsFile;
 
-	/** Input file name for (onset) feature file, instead of audio input, for ICASSP'07 paper */ 
+	/**
+	 * Input file name for (onset) feature file, instead of audio input, for
+	 * ICASSP'07 paper
+	 */
 	protected String featureFile;
 
-	/** Input file for batch processing where each line contains a list of arguments for a BeatRoot run */
+	/**
+	 * Input file for batch processing where each line contains a list of arguments
+	 * for a BeatRoot run
+	 */
 	protected String argsFile;
-	
+
 	/** Flag to load/save onsets */
 	protected boolean onsetOnly = false;
-	
-	/** For beat tracking with the first n notes given, this is the value of n.
-	 *  (e.g. n==1 determines the initial phase only; n==2 determines the initial phase and tempo)
+
+	/**
+	 * For beat tracking with the first n notes given, this is the value of n. (e.g.
+	 * n==1 determines the initial phase only; n==2 determines the initial phase and
+	 * tempo)
 	 */
 	protected int useAnnotation = 0;
 
 	/** For reading argsFile */
 	protected BufferedReader reader;
 
-	/** Flag indicating whether audio with beats should be played after processing is complete */
+	/**
+	 * Flag indicating whether audio with beats should be played after processing is
+	 * complete
+	 */
 	protected boolean playWithBeats;
 
-	/** Flag indicating that no GUI input is expected, i.e. that the program exits after processing the command line */
+	/**
+	 * Flag indicating that no GUI input is expected, i.e. that the program exits
+	 * after processing the command line
+	 */
 	protected boolean batchMode;
 
 	/** Flag for suppressing messages to standard output */
 	protected boolean silentFlag = false;
 
+	/**
+	 * Custom flag for the osu beatmap generator project.
+	 */
+	private boolean osuCustomFlag = false;
+
 	/** Flag indicating whether warning messages should be ignored or displayed */
 	protected static boolean ignoreWarnings = false;
 
-	/** Process command line arguments.
-	 * Arguments are: <I>[option]* [audioFile]</I>, where
-	 * <I>audioFile</I> is the file name of the audio input file
-	 * containing WAV format data.
-	 * The <I>option</I> arguments can be any of the following (in any order):<BL>
-	 * <LI><I><B>-m</B> argsFile</I> File name of text file containing lines of arguments for batch processing</LI>
-	 * <LI><I><B>-a</B> beatFile</I> File name of text file containing annotated beat times for evaluation</LI>
-	 * <LI><I><B>-i</B> beatFile</I> File name of TMF file containing beat times for editing</LI>
-	 * <LI><I><B>-b</B></I> Process in batch mode (save results and exit immediately after processing)</LI>
-	 * <LI><I><B>-f</B> featureFile</I> Feature file on which to perform beat tracking (for ICASSP'07 paper)</LI>
+	/**
+	 * Process command line arguments. Arguments are: <I>[option]* [audioFile]</I>,
+	 * where <I>audioFile</I> is the file name of the audio input file containing
+	 * WAV format data. The <I>option</I> arguments can be any of the following (in
+	 * any order):<BL>
+	 * <LI><I><B>-m</B> argsFile</I> File name of text file containing lines of
+	 * arguments for batch processing</LI>
+	 * <LI><I><B>-a</B> beatFile</I> File name of text file containing annotated
+	 * beat times for evaluation</LI>
+	 * <LI><I><B>-i</B> beatFile</I> File name of TMF file containing beat times for
+	 * editing</LI>
+	 * <LI><I><B>-b</B></I> Process in batch mode (save results and exit immediately
+	 * after processing)</LI>
+	 * <LI><I><B>-f</B> featureFile</I> Feature file on which to perform beat
+	 * tracking (for ICASSP'07 paper)</LI>
 	 * <LI><I><B>-h</B> highThreshold</I> Spectrogram energy threshold corresponding
-	 *  to maximum value in colour map</LI>
+	 * to maximum value in colour map</LI>
 	 * <LI><I><B>-l</B> lowThreshold</I> Spectrogram energy threshold corresponding
-	 *  to minimum value in colour map</LI>
-	 * <LI><I><B>-o</B> outputFile</I> Save output to this file (implies <I><B>-b</B></I>)</LI>
-	 * <LI><I><B>-O</B> Output the times of onsets, not beats, and exit (use -o
-	 * flag to specify the output file; implies batch mode)</LI>
-	 * <LI><I><B>-p</B></I> Play audio with beats as soon as processing is completed</LI>
-	 * <LI><I><B>-q</B></I> Suppress output of warnings (TODO) </LI>
-	 * <LI><I><B>-s</B> audioScaleFactor</I> Constant for scaling amplitude envelope display</LI>
-	 * <LI><I><B>-t</B> hopTime</I> spacing of audio frames (in seconds, default 0.01)</LI>
+	 * to minimum value in colour map</LI>
+	 * <LI><I><B>-o</B> outputFile</I> Save output to this file (implies
+	 * <I><B>-b</B></I>)</LI>
+	 * <LI><I><B>-O</B> Output the times of onsets, not beats, and exit (use -o flag
+	 * to specify the output file; implies batch mode)</LI>
+	 * <LI><I><B>-p</B></I> Play audio with beats as soon as processing is
+	 * completed</LI>
+	 * <LI><I><B>-q</B></I> Suppress output of warnings (TODO)</LI>
+	 * <LI><I><B>-s</B> audioScaleFactor</I> Constant for scaling amplitude envelope
+	 * display</LI>
+	 * <LI><I><B>-t</B> hopTime</I> spacing of audio frames (in seconds, default
+	 * 0.01)</LI>
 	 * <LI><I><B>-T</B> frameTime</I> size of FFT (in seconds, default 0.01161)</LI>
 	 * <LI><I><B>-w</B></I> live input (not used)</LI>
 	 * <LI><I><B>-c</B></I> cursor is always at centre; data scrolls past it</LI>
-	 * <LI><I><B>-e</B> allowedError</I> allowed error in beat position for evaluation</LI>
-	 * <LI><I><B>-E</B> allowedRelativeError</I> allowed relative error (0-1) in beat position for evaluation</LI>
-	 * </BL>
+	 * <LI><I><B>-e</B> allowedError</I> allowed error in beat position for
+	 * evaluation</LI>
+	 * <LI><I><B>-E</B> allowedRelativeError</I> allowed relative error (0-1) in
+	 * beat position for evaluation</LI> </BL>
 	 */
 	public void processArgs(String[] args) {
 		audioIn = null;
@@ -153,7 +189,7 @@ public class BeatRoot {
 		textOutputFile = null;
 		beatsFile = null;
 		featureFile = null;
-		for (int i=0; i < args.length; i++) {
+		for (int i = 0; i < args.length; i++) {
 			if ((args[i].length() == 2) && (args[i].charAt(0) == '-')) {
 				switch (args[i].charAt(1)) {
 				case 'A':
@@ -165,8 +201,12 @@ public class BeatRoot {
 				case 'i':
 					beatsIn = args[++i];
 					break;
-				case 'b': batchMode = true; break;
-				case 'q': silentFlag = true; break;
+				case 'b':
+					batchMode = true;
+					break;
+				case 'q':
+					silentFlag = true;
+					break;
 				case 'f':
 					featureFile = args[++i];
 					break;
@@ -218,8 +258,14 @@ public class BeatRoot {
 				case 'c':
 					BeatTrackDisplay.centred = true;
 					break;
+				case 'x':
+					osuCustomFlag = true;
+					textOutputFile = args[++i];
+					batchMode = true;
+					break;
 				default:
 					warning("Illegal command line argument");
+					break;
 				}
 			} else {
 				if (audioIn != null)
@@ -232,10 +278,13 @@ public class BeatRoot {
 		}
 	} // processArgs()
 
-	/** Constructor. Initialises the BeatRoot application,
-	 *  including the GUI, and processes any command line arguments.
-	 *  @param args Optional command line arguments.
-	 *  @see #processArgs(String[])
+	/**
+	 * Constructor. Initialises the BeatRoot application, including the GUI, and
+	 * processes any command line arguments.
+	 * 
+	 * @param args
+	 *            Optional command line arguments.
+	 * @see #processArgs(String[])
 	 */
 	public BeatRoot(String[] args) {
 		batchMode = false;
@@ -262,7 +311,7 @@ public class BeatRoot {
 					audioPlayer.play();
 			}
 		} else {
-			while (true) {					// loop for each line of args file
+			while (true) { // loop for each line of args file
 				if (argsFile != null) {
 					args = getArgs();
 					if (args != null)
@@ -270,7 +319,7 @@ public class BeatRoot {
 					else
 						break;
 				}
-				if (featureFile != null) {	// for ICASSP'07 paper
+				if (featureFile != null) { // for ICASSP'07 paper
 					audioProcessor.processFeatures(featureFile, 512.0 / 44100.0);
 				} else if (audioIn != null) {
 					audioProcessor.setInputFile(audioIn);
@@ -278,11 +327,12 @@ public class BeatRoot {
 					if (onsetOnly && (textOutputFile != null)) {
 						if (textOutputFile.endsWith(".obj"))
 							audioProcessor.onsetList.writeBinary(textOutputFile);
-						else try {
-							audioProcessor.onsetList.writeBeatsAsText(textOutputFile);
-						} catch (Exception e) {
-							System.err.println("Can't write onset file\n" + e);
-						}
+						else
+							try {
+								audioProcessor.onsetList.writeBeatsAsText(textOutputFile);
+							} catch (Exception e) {
+								System.err.println("Can't write onset file\n" + e);
+							}
 						if (argsFile != null)
 							continue;
 						else
@@ -314,7 +364,11 @@ public class BeatRoot {
 						BeatTrackDisplay.evaluate(beatsFile, beats);
 					if (textOutputFile != null) {
 						try {
-							beats.writeBeatsAsText(textOutputFile);
+							if (osuCustomFlag) {
+								writeBeatsAndOnsets(beats, audioProcessor.onsetList, textOutputFile);
+							} else {
+								beats.writeBeatsAsText(textOutputFile);
+							}
 						} catch (Exception e) {
 							e.printStackTrace();
 						}
@@ -326,16 +380,31 @@ public class BeatRoot {
 			}
 			System.exit(0);
 		}
-//		try {
-//			while (audioPlayer.playing)
-//				Thread.sleep(200);
-//		} catch (InterruptedException e) {
-//		}
-	}  // constructor
+		// try {
+		// while (audioPlayer.playing)
+		// Thread.sleep(200);
+		// } catch (InterruptedException e) {
+		// }
+	} // constructor
 
-	/** Reads a line from the arguments file <code>argsFile</code>, and converts
-	 *  it into an array of Strings, allowing for quoted strings.
-	 *  @return The next line of arguments as a <code>String[]</code> 
+	private void writeBeatsAndOnsets(EventList beats, EventList onsets, String fileName) throws FileNotFoundException {
+		PrintStream out = new PrintStream(new File(fileName));
+		for (Iterator<Event> it = beats.iterator(); it.hasNext();) {
+			Event e = it.next();
+			out.printf("%5.3f%c", e.keyDown, it.hasNext() ? ',' : '\n');
+		}
+		for (Iterator<Event> it = onsets.iterator(); it.hasNext();) {
+			Event e = it.next();
+			out.printf("%5.3f%c", e.keyDown, it.hasNext() ? ',' : '\n');
+		}
+		out.close();
+	}
+
+	/**
+	 * Reads a line from the arguments file <code>argsFile</code>, and converts it
+	 * into an array of Strings, allowing for quoted strings.
+	 * 
+	 * @return The next line of arguments as a <code>String[]</code>
 	 */
 	protected String[] getArgs() {
 		try {
@@ -347,7 +416,7 @@ public class BeatRoot {
 		}
 		try {
 			String s = reader.readLine();
-			while ((s != null) && (s.startsWith("#")))	// skip comments
+			while ((s != null) && (s.startsWith("#"))) // skip comments
 				s = reader.readLine();
 			return stringToArgs(s);
 		} catch (IOException e) {
@@ -355,7 +424,7 @@ public class BeatRoot {
 			return null;
 		}
 	} // getArgs()
-	
+
 	public static String[] stringToArgs(String s) {
 		if (s == null)
 			return null;
@@ -372,15 +441,16 @@ public class BeatRoot {
 				argBuff.add(s.substring(start));
 				break;
 			} else if ((delim < 0) || ((space >= start) && (space < delim))) {
-				argBuff.add(s.substring(start,space));
+				argBuff.add(s.substring(start, space));
 				start = space + 1;
 			} else if (delim == start) {
-				delim = s.indexOf('"', start+1);
+				delim = s.indexOf('"', start + 1);
 				if (delim <= start + 1) {
-					System.err.println("Parse error in args file: " + s + " (" + start + "," + space + "," + delim + ")");
+					System.err
+							.println("Parse error in args file: " + s + " (" + start + "," + space + "," + delim + ")");
 					return null;
 				}
-				argBuff.add(s.substring(start+1, delim));
+				argBuff.add(s.substring(start + 1, delim));
 				start = delim + 1;
 			} else {
 				System.err.println("Parse error in args file: " + s + " (" + start + "," + space + "," + delim + ")");
@@ -389,21 +459,24 @@ public class BeatRoot {
 		}
 		return argBuff.toArray(new String[argBuff.size()]);
 	} // getArgs()
-	
-	/** Open an exit dialog.  Protects against inadvertant presses of the exit button.
-	 *  Could be extended to save settings and data automatically.
+
+	/**
+	 * Open an exit dialog. Protects against inadvertant presses of the exit button.
+	 * Could be extended to save settings and data automatically.
 	 */
 	public static void quit() {
-		if (JOptionPane.showConfirmDialog(null, "Warning: " +
-				"this operation may result in loss of data :)\n" + 
-				"Do you really want to quit?", "Just checking ...",
-				JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION)
+		if (JOptionPane.showConfirmDialog(null,
+				"Warning: " + "this operation may result in loss of data :)\n" + "Do you really want to quit?",
+				"Just checking ...", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION)
 			System.exit(0);
 	} // quit()
 
-	/** Print a warning message.
-	 *  Could be extended to save warning messages to a log file. 
-	 *  @param message The warning message
+	/**
+	 * Print a warning message. Could be extended to save warning messages to a log
+	 * file.
+	 * 
+	 * @param message
+	 *            The warning message
 	 */
 	public static void warning(String message) {
 		System.err.println("Warning: " + message);
@@ -411,26 +484,31 @@ public class BeatRoot {
 		if (!ignoreWarnings) {
 			String string1 = "OK";
 			String string2 = "Ignore future warnings";
-			Object[] options = {string1, string2};
-			int n = JOptionPane.showOptionDialog(null, "Warning: " + message,
-					"Warning", JOptionPane.YES_NO_OPTION,
+			Object[] options = { string1, string2 };
+			int n = JOptionPane.showOptionDialog(null, "Warning: " + message, "Warning", JOptionPane.YES_NO_OPTION,
 					JOptionPane.WARNING_MESSAGE, null, options, string1);
 			ignoreWarnings = (n != JOptionPane.YES_OPTION);
 		}
 	} // warning()
-	
-	/** Print an error message and opens an exit dialog.  Generally better than an 
-	 *  immediate exit, since the user might want to save some data before exiting.
-	 *  @param message The error message
+
+	/**
+	 * Print an error message and opens an exit dialog. Generally better than an
+	 * immediate exit, since the user might want to save some data before exiting.
+	 * 
+	 * @param message
+	 *            The error message
 	 */
 	public static void error(String message) {
 		if (JOptionPane.showConfirmDialog(null, "Error: " + message + "\nContinue?", "Error",
 				JOptionPane.YES_NO_OPTION) == JOptionPane.NO_OPTION)
 			System.exit(0);
 	} // error()
-	
-	/** Entry point for BeatRoot application.
-	 *  @param args Optional command line arguments (see constructor for details)
+
+	/**
+	 * Entry point for BeatRoot application.
+	 * 
+	 * @param args
+	 *            Optional command line arguments (see constructor for details)
 	 */
 	public static void main(String[] args) {
 		new BeatRoot(args);
