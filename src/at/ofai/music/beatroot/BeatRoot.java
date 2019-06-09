@@ -70,17 +70,8 @@ import at.ofai.music.util.EventList;
  */
 public class BeatRoot {
 
-	/** The graphical user interface (frame) object */
-	protected GUI gui;
-
-	/** The object that deals with audio output */
-	protected AudioPlayer audioPlayer;
-
 	/** The object that deals with processing the audio data */
 	protected AudioProcessor audioProcessor;
-
-	/** The dialog window for selecting files for opening and saving data */
-	protected Chooser fileChooser;
 
 	/** File name of audio input file */
 	protected String audioIn = null;
@@ -118,9 +109,6 @@ public class BeatRoot {
 	 * tempo)
 	 */
 	protected int useAnnotation = 0;
-
-	/** For reading argsFile */
-	protected BufferedReader reader;
 
 	/**
 	 * Flag indicating whether audio with beats should be played after processing is
@@ -244,7 +232,6 @@ public class BeatRoot {
 				case 'm':
 					argsFile = args[++i];
 					batchMode = true;
-					reader = null;
 					break;
 				case 't':
 					audioProcessor.hopTime = Double.parseDouble(args[++i]);
@@ -279,7 +266,7 @@ public class BeatRoot {
 	} // processArgs()
 
 	/**
-	 * Constructor. Initialises the BeatRoot application, including the GUI, and
+	 * Constructor. Initializes the BeatRoot application, including the GUI, and
 	 * processes any command line arguments.
 	 * 
 	 * @param args
@@ -290,16 +277,12 @@ public class BeatRoot {
 		batchMode = false;
 		playWithBeats = false;
 		argsFile = null;
-		reader = null;
-		fileChooser = null;
-		gui = null;
 		audioProcessor = new AudioProcessor();
 		processArgs(args);
-		if (!batchMode)
-			fileChooser = new Chooser();
-		audioPlayer = new AudioPlayer(null, fileChooser);
 		if (!batchMode) {
-			gui = new GUI(audioPlayer, audioProcessor, fileChooser);
+			Chooser fileChooser = new Chooser();
+			AudioPlayer audioPlayer = new AudioPlayer(null, fileChooser);
+			GUI gui = new GUI(audioPlayer, audioProcessor, fileChooser);
 			gui.setVisible(true);
 			if (audioIn != null) {
 				gui.loadAudioData(audioIn);
@@ -407,23 +390,18 @@ public class BeatRoot {
 	 * @return The next line of arguments as a <code>String[]</code>
 	 */
 	protected String[] getArgs() {
-		try {
-			if (reader == null)
-				reader = new BufferedReader(new FileReader(argsFile));
-		} catch (FileNotFoundException e) {
-			System.err.println(e);
-			return null;
-		}
-		try {
+		try (FileReader fr = new FileReader(argsFile);
+				BufferedReader reader = new BufferedReader(new FileReader(argsFile))) {
 			String s = reader.readLine();
-			while ((s != null) && (s.startsWith("#"))) // skip comments
+			while ((s != null) && (s.startsWith("#"))) { // skip comments
 				s = reader.readLine();
+			}
 			return stringToArgs(s);
 		} catch (IOException e) {
 			System.err.println(e);
 			return null;
 		}
-	} // getArgs()
+	}
 
 	public static String[] stringToArgs(String s) {
 		if (s == null)
